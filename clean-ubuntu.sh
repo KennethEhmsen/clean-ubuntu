@@ -1156,6 +1156,43 @@ confirm_execution() {
     fi
 }
 
+# ─── Custom MOTD ─────────────────────────────────────────────────────────────
+install_custom_motd() {
+    log_phase "Installing custom MOTD banner"
+
+    # Disable default Ubuntu MOTD scripts (ads, ESM nags, help links)
+    local disable_scripts=(
+        00-header
+        10-help-text
+        50-motd-news
+        90-updates-available
+        91-contract-ua-esm-status
+        91-release-upgrade
+        95-hwe-eol
+        97-overlayroot
+        98-fsck-at-reboot
+        98-reboot-required
+    )
+    for script in "${disable_scripts[@]}"; do
+        if [[ -f "/etc/update-motd.d/$script" ]]; then
+            chmod -x "/etc/update-motd.d/$script"
+        fi
+    done
+
+    # Clear static MOTD
+    : > /etc/motd 2>/dev/null || true
+
+    # Install custom dynamic MOTD from bundled file
+    local motd_src="$SCRIPT_DIR/defaults/00-custom-motd"
+    if [[ -f "$motd_src" ]]; then
+        cp "$motd_src" /etc/update-motd.d/00-custom
+        chmod +x /etc/update-motd.d/00-custom
+        log_action "Custom MOTD installed at /etc/update-motd.d/00-custom"
+    else
+        log_warn "MOTD template not found at $motd_src — skipping"
+    fi
+}
+
 # ─── Main ────────────────────────────────────────────────────────────────────
 main() {
     parse_arguments "$@"
@@ -1219,6 +1256,9 @@ main() {
             log_warn "SSH service not running! Attempting to start..."
             systemctl start ssh 2>/dev/null || systemctl start sshd 2>/dev/null || true
         fi
+
+        # Install custom MOTD
+        install_custom_motd
 
         generate_post_report
     fi
