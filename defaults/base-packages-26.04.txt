@@ -1,0 +1,5 @@
+# Ubuntu Server 26.04 LTS (Resolute Raccoon) base package manifest
+# TODO: Populate from the official server ISO manifest after release (April 2026)
+#   URL: https://releases.ubuntu.com/26.04/ubuntu-26.04-live-server-amd64.manifest
+#   Remove installer-only packages (casper, eatmydata, squashfs-tools, etc.)
+#   Remove version-specific kernel packages (keep meta-packages like linux-generic)

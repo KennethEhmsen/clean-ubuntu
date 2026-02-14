@@ -97,7 +97,7 @@ usage() {
     cat <<'EOF'
 Usage: sudo ./clean-ubuntu.sh [OPTIONS]
 
-Reset Ubuntu Server (22.04 or 24.04 LTS) to bare-installation state.
+Reset Ubuntu Server (22.04, 24.04, or 26.04 LTS) to bare-installation state.
 Preserves: users, groups, sudoers, SSH keys/certificates/config.
 
 Options:
@@ -167,8 +167,8 @@ check_prerequisites() {
     [[ "$ID" != "ubuntu" ]] && die "This script only supports Ubuntu (detected: $ID)"
 
     case "$VERSION_ID" in
-        22.04|24.04) ;;
-        *) die "This script supports Ubuntu 22.04 and 24.04 LTS only (detected: $VERSION_ID)" ;;
+        22.04|24.04|26.04) ;;
+        *) die "This script supports Ubuntu 22.04, 24.04 and 26.04 LTS only (detected: $VERSION_ID)" ;;
     esac
 
     UBUNTU_VERSION="$VERSION_ID"
@@ -178,6 +178,7 @@ check_prerequisites() {
     case "$UBUNTU_VERSION" in
         22.04) DEFAULT_SNAPS="bare core20 core22 lxd snapd" ;;
         24.04) DEFAULT_SNAPS="bare core22 core24 lxd snapd" ;;
+        26.04) DEFAULT_SNAPS="bare core24 core26 lxd snapd" ;;
     esac
 
     # Ensure log directory is writable
@@ -260,8 +261,8 @@ phase_01_scan() {
         while IFS= read -r -d '' file; do
             local basename
             basename=$(basename "$file")
-            # On 24.04, ubuntu.sources is the default system repo — not external
-            if [[ "$UBUNTU_VERSION" == "24.04" && "$basename" == "ubuntu.sources" ]]; then
+            # On 24.04+, ubuntu.sources is the default system repo — not external
+            if [[ "$UBUNTU_VERSION" != "22.04" && "$basename" == "ubuntu.sources" ]]; then
                 continue
             fi
             ADDED_REPOS+=("$file")
@@ -313,8 +314,8 @@ phase_01_clean() {
     done
 
     # Restore default sources — format depends on Ubuntu version
-    if [[ "$UBUNTU_VERSION" == "24.04" ]]; then
-        # 24.04 uses deb822 .sources format
+    if [[ "$UBUNTU_VERSION" == "24.04" || "$UBUNTU_VERSION" == "26.04" ]]; then
+        # 24.04+ uses deb822 .sources format
         cat > /etc/apt/sources.list.d/ubuntu.sources <<SOURCES
 Types: deb
 URIs: http://archive.ubuntu.com/ubuntu/
