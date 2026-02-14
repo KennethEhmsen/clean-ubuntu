@@ -346,24 +346,79 @@ phase_02_scan() {
 phase_02_clean() {
     log_phase "Phase 2: Removing added APT packages"
 
-    if [[ ${#SAFE_TO_REMOVE[@]} -gt 0 ]]; then
-        export DEBIAN_FRONTEND=noninteractive
+    if [[ ${#SAFE_TO_REMOVE[@]} -eq 0 ]]; then
+        log_info "No packages to remove"
+        return
+    fi
 
-        log_info "Removing ${#SAFE_TO_REMOVE[@]} manually installed packages..."
-        apt-get remove --purge -y \
-            -o Dpkg::Options::="--force-confdef" \
-            -o Dpkg::Options::="--force-confold" \
-            "${SAFE_TO_REMOVE[@]}" 2>&1 | tee -a "$LOG_FILE" || true
+    export DEBIAN_FRONTEND=noninteractive
+    local apt_opts=(-o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold")
+    local batch_size=20
+    local max_passes=5
+    local pass=0
+    local total_removed=0
+    local remaining=("${SAFE_TO_REMOVE[@]}")
 
-        log_info "Running autoremove..."
+    while [[ ${#remaining[@]} -gt 0 && $pass -lt $max_passes ]]; do
+        pass=$((pass + 1))
+        log_info "Pass $pass: ${#remaining[@]} packages to remove"
+        local failed=()
+        local removed_this_pass=0
+
+        # Process in batches
+        local i=0
+        while [[ $i -lt ${#remaining[@]} ]]; do
+            local batch=("${remaining[@]:$i:$batch_size}")
+            i=$((i + batch_size))
+
+            if apt-get remove --purge -y "${apt_opts[@]}" "${batch[@]}" 2>&1 | tee -a "$LOG_FILE"; then
+                removed_this_pass=$((removed_this_pass + ${#batch[@]}))
+            else
+                # Batch failed — try each package individually
+                log_warn "Batch failed, falling back to individual removal"
+                for pkg in "${batch[@]}"; do
+                    if dpkg -l "$pkg" 2>/dev/null | grep -q '^ii'; then
+                        if apt-get remove --purge -y "${apt_opts[@]}" "$pkg" 2>&1 | tee -a "$LOG_FILE"; then
+                            removed_this_pass=$((removed_this_pass + 1))
+                        else
+                            log_warn "Failed to remove: $pkg (will retry next pass)"
+                            failed+=("$pkg")
+                        fi
+                    fi
+                done
+            fi
+        done
+
+        # Autoremove after each pass to unblock further removals
         apt-get autoremove --purge -y 2>&1 | tee -a "$LOG_FILE" || true
 
-        apt-get clean 2>&1 | tee -a "$LOG_FILE"
-        apt-get autoclean 2>&1 | tee -a "$LOG_FILE"
-        log_action "Package removal completed"
-    else
-        log_info "No packages to remove"
-    fi
+        total_removed=$((total_removed + removed_this_pass))
+        log_info "Pass $pass complete: removed $removed_this_pass packages"
+
+        # Filter remaining to only packages still installed
+        local still_installed=()
+        for pkg in "${failed[@]}"; do
+            if dpkg -l "$pkg" 2>/dev/null | grep -q '^ii'; then
+                still_installed+=("$pkg")
+            fi
+        done
+        remaining=("${still_installed[@]}")
+
+        # If nothing was removed this pass, no point retrying
+        if [[ $removed_this_pass -eq 0 ]]; then
+            if [[ ${#remaining[@]} -gt 0 ]]; then
+                log_warn "Could not remove ${#remaining[@]} packages after $pass passes:"
+                for pkg in "${remaining[@]}"; do
+                    log_warn "  - $pkg"
+                done
+            fi
+            break
+        fi
+    done
+
+    apt-get clean 2>&1 | tee -a "$LOG_FILE"
+    apt-get autoclean 2>&1 | tee -a "$LOG_FILE"
+    log_action "Package removal completed: $total_removed removed, ${#remaining[@]} failed"
 
     # Re-install any base packages that may have been pulled as collateral
     local missing_base
@@ -1095,9 +1150,9 @@ main() {
         should_skip_phase 6  || phase_06_clean   # Databases
         should_skip_phase 7  || phase_07_clean   # Cron
         should_skip_phase 10 || phase_10_clean   # Language packages (before removing interpreters)
-        should_skip_phase 2  || phase_02_clean   # APT packages (main removal)
+        should_skip_phase 1  || phase_01_clean   # Repos (before packages — avoids broken repo conflicts)
+        should_skip_phase 2  || phase_02_clean   # APT packages (main removal, batched with retries)
         should_skip_phase 3  || phase_03_clean   # Snaps
-        should_skip_phase 1  || phase_01_clean   # Repos (after packages removed)
         should_skip_phase 8  || phase_08_clean   # Firewall
         should_skip_phase 9  || phase_09_clean   # Directories
         should_skip_phase 11 || phase_11_clean   # Logs/temp
