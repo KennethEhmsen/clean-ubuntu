@@ -97,7 +97,7 @@ usage() {
     cat <<'EOF'
 Usage: sudo ./clean-ubuntu.sh [OPTIONS]
 
-Reset Ubuntu Server (22.04, 24.04, or 26.04 LTS) to bare-installation state.
+Reset Ubuntu Server (20.04, 22.04, 24.04, or 26.04 LTS) to bare-installation state.
 Preserves: users, groups, sudoers, SSH keys/certificates/config.
 
 Options:
@@ -167,8 +167,8 @@ check_prerequisites() {
     [[ "$ID" != "ubuntu" ]] && die "This script only supports Ubuntu (detected: $ID)"
 
     case "$VERSION_ID" in
-        22.04|24.04|26.04) ;;
-        *) die "This script supports Ubuntu 22.04, 24.04 and 26.04 LTS only (detected: $VERSION_ID)" ;;
+        20.04|22.04|24.04|26.04) ;;
+        *) die "This script supports Ubuntu 20.04, 22.04, 24.04 and 26.04 LTS only (detected: $VERSION_ID)" ;;
     esac
 
     UBUNTU_VERSION="$VERSION_ID"
@@ -176,6 +176,7 @@ check_prerequisites() {
 
     # Version-specific default snaps
     case "$UBUNTU_VERSION" in
+        20.04) DEFAULT_SNAPS="bare core18 core20 lxd snapd" ;;
         22.04) DEFAULT_SNAPS="bare core20 core22 lxd snapd" ;;
         24.04) DEFAULT_SNAPS="bare core22 core24 lxd snapd" ;;
         26.04) DEFAULT_SNAPS="bare core24 core26 lxd snapd" ;;

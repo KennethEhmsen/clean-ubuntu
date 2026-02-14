@@ -1,6 +1,6 @@
 # clean-ubuntu
 
-Reset Ubuntu Server 22.04/24.04/26.04 LTS to bare-installation state. Removes everything installed or configured after the initial OS install while preserving users, sudoers, and SSH.
+Reset Ubuntu Server 20.04/22.04/24.04/26.04 LTS to bare-installation state. Removes everything installed or configured after the initial OS install while preserving users, sudoers, and SSH.
 
 ## What it does
 
@@ -74,7 +74,7 @@ sudo ./clean-ubuntu.sh --execute --yes
 
 ## Requirements
 
-- Ubuntu Server **22.04 LTS** (Jammy Jellyfish), **24.04 LTS** (Noble Numbat), or **26.04 LTS** (Resolute Raccoon)
+- Ubuntu Server **20.04 LTS** (Focal Fossa), **22.04 LTS** (Jammy Jellyfish), **24.04 LTS** (Noble Numbat), or **26.04 LTS** (Resolute Raccoon)
 - Root privileges (`sudo`)
 - The script will refuse to run on any other Ubuntu version
 

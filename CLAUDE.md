@@ -2,11 +2,12 @@
 
 ## Project overview
 
-Single bash script (`clean-ubuntu.sh`) that resets Ubuntu Server 22.04, 24.04, or 26.04 LTS to bare-installation state. Removes all packages, services, data, and configs added after initial install while preserving users, sudoers, and SSH.
+Single bash script (`clean-ubuntu.sh`) that resets Ubuntu Server 20.04, 22.04, 24.04, or 26.04 LTS to bare-installation state. Removes all packages, services, data, and configs added after initial install while preserving users, sudoers, and SSH.
 
 ## Architecture
 
 - **`clean-ubuntu.sh`** — monolithic script, all logic in one file. 12 scan/clean phase pairs, argument parser, report generator, backup system. Auto-detects Ubuntu version and adapts behavior accordingly.
+- **`defaults/base-packages-20.04.txt`** — fallback package manifest for Ubuntu 20.04 (562 packages). Derived from the official `ubuntu-20.04.6-live-server-amd64.manifest` with installer-only packages removed.
 - **`defaults/base-packages-22.04.txt`** — fallback package manifest for Ubuntu 22.04 (609 packages). Derived from `apt-cache depends --recurse ubuntu-server ubuntu-minimal ubuntu-standard` plus essential packages confirmed on a real system.
 - **`defaults/base-packages-24.04.txt`** — fallback package manifest for Ubuntu 24.04 (670 packages). Derived from the official `ubuntu-24.04.4-live-server-amd64.manifest` with installer-only and version-specific kernel packages removed.
 - **`defaults/base-packages-26.04.txt`** — placeholder manifest for Ubuntu 26.04. To be populated from the official server ISO manifest after release (April 2026).
@@ -15,12 +16,12 @@ Single bash script (`clean-ubuntu.sh`) that resets Ubuntu Server 22.04, 24.04, o
 
 The script detects `VERSION_ID` from `/etc/os-release` and sets `UBUNTU_VERSION` and `UBUNTU_CODENAME` globals. Version-dependent behavior:
 
-| Feature | 22.04 (Jammy) | 24.04 (Noble) | 26.04 (Resolute) |
-|---------|---------------|---------------|------------------|
-| APT sources format | Traditional `sources.list` | deb822 `ubuntu.sources` | deb822 `ubuntu.sources` |
-| Default snaps | bare core20 core22 lxd snapd | bare core22 core24 lxd snapd | bare core24 core26 lxd snapd |
-| Base manifest | `base-packages-22.04.txt` | `base-packages-24.04.txt` | `base-packages-26.04.txt` (placeholder) |
-| Python version | 3.10 | 3.12 | TBD |
+| Feature | 20.04 (Focal) | 22.04 (Jammy) | 24.04 (Noble) | 26.04 (Resolute) |
+|---------|---------------|---------------|---------------|------------------|
+| APT sources format | Traditional `sources.list` | Traditional `sources.list` | deb822 `ubuntu.sources` | deb822 `ubuntu.sources` |
+| Default snaps | bare core18 core20 lxd snapd | bare core20 core22 lxd snapd | bare core22 core24 lxd snapd | bare core24 core26 lxd snapd |
+| Base manifest | `base-packages-20.04.txt` | `base-packages-22.04.txt` | `base-packages-24.04.txt` | `base-packages-26.04.txt` (placeholder) |
+| Python version | 3.8 | 3.10 | 3.12 | TBD |
 
 ## Key design decisions
 
