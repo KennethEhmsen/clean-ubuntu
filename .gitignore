@@ -1,0 +1,5 @@
+.claude/
+*.log
+*.bak
+*.swp
+*~
