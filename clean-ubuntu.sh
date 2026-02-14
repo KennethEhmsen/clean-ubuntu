@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 ###############################################################################
-# clean-ubuntu.sh — Reset Ubuntu Server 22.04 LTS to bare-install state
+# clean-ubuntu.sh — Reset Ubuntu Server to bare-install state
+#
+# Supported: Ubuntu Server 22.04 LTS (Jammy) and 24.04 LTS (Noble)
 #
 # Preserves: users, groups, sudoers, SSH keys/certs/config
 # Removes:   everything else installed or configured after the base install
@@ -18,8 +20,12 @@ readonly TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 readonly LOG_FILE="/var/log/clean-ubuntu-${TIMESTAMP}.log"
 readonly BACKUP_DIR="/root/clean-ubuntu-backup-${TIMESTAMP}"
 
-# Default snaps on Ubuntu Server 22.04
-readonly DEFAULT_SNAPS="bare core20 core22 lxd snapd"
+# Default snaps (version-specific, set in check_prerequisites)
+DEFAULT_SNAPS=""
+
+# Detected version (set in check_prerequisites)
+UBUNTU_VERSION=""
+UBUNTU_CODENAME=""
 
 # ─── Global State ────────────────────────────────────────────────────────────
 MODE="dry-run"
@@ -91,7 +97,7 @@ usage() {
     cat <<'EOF'
 Usage: sudo ./clean-ubuntu.sh [OPTIONS]
 
-Reset Ubuntu Server 22.04 LTS to bare-installation state.
+Reset Ubuntu Server (22.04 or 24.04 LTS) to bare-installation state.
 Preserves: users, groups, sudoers, SSH keys/certificates/config.
 
 Options:
@@ -159,27 +165,42 @@ check_prerequisites() {
 
     source /etc/os-release 2>/dev/null || die "Cannot read /etc/os-release"
     [[ "$ID" != "ubuntu" ]] && die "This script only supports Ubuntu (detected: $ID)"
-    [[ "$VERSION_ID" != "22.04" ]] && die "This script only supports Ubuntu 22.04 LTS (detected: $VERSION_ID)"
+
+    case "$VERSION_ID" in
+        22.04|24.04) ;;
+        *) die "This script supports Ubuntu 22.04 and 24.04 LTS only (detected: $VERSION_ID)" ;;
+    esac
+
+    UBUNTU_VERSION="$VERSION_ID"
+    UBUNTU_CODENAME="$VERSION_CODENAME"
+
+    # Version-specific default snaps
+    case "$UBUNTU_VERSION" in
+        22.04) DEFAULT_SNAPS="bare core20 core22 lxd snapd" ;;
+        24.04) DEFAULT_SNAPS="bare core22 core24 lxd snapd" ;;
+    esac
 
     # Ensure log directory is writable
     touch "$LOG_FILE" 2>/dev/null || die "Cannot write to $LOG_FILE"
 
-    log_info "Ubuntu $VERSION_ID ($VERSION_CODENAME) detected"
+    log_info "Ubuntu $UBUNTU_VERSION ($UBUNTU_CODENAME) detected"
     log_info "Mode: $MODE"
     log_info "Log file: $LOG_FILE"
 }
 
 # ─── Load Base Package List ─────────────────────────────────────────────────
 load_base_packages() {
+    local manifest_file="$SCRIPT_DIR/defaults/base-packages-${UBUNTU_VERSION}.txt"
+
     if [[ -f /var/log/installer/initial-status.gz ]]; then
         BASE_PACKAGES=$(gzip -dc /var/log/installer/initial-status.gz | \
                         sed -n 's/^Package: //p' | sort -u)
         log_info "Loaded base manifest from /var/log/installer/initial-status.gz ($(echo "$BASE_PACKAGES" | wc -l) packages)"
-    elif [[ -f "$SCRIPT_DIR/defaults/base-packages.txt" ]]; then
-        BASE_PACKAGES=$(grep -v '^#' "$SCRIPT_DIR/defaults/base-packages.txt" | grep -v '^$' | sort -u)
-        log_warn "initial-status.gz not found — using fallback manifest ($(echo "$BASE_PACKAGES" | wc -l) packages)"
+    elif [[ -f "$manifest_file" ]]; then
+        BASE_PACKAGES=$(grep -v '^#' "$manifest_file" | grep -v '^$' | sort -u)
+        log_warn "initial-status.gz not found — using fallback manifest for $UBUNTU_VERSION ($(echo "$BASE_PACKAGES" | wc -l) packages)"
     else
-        die "No base package manifest found. Place base-packages.txt in $SCRIPT_DIR/defaults/"
+        die "No base package manifest found for Ubuntu $UBUNTU_VERSION. Expected: $manifest_file"
     fi
 }
 
@@ -223,8 +244,8 @@ create_backup() {
     dpkg --get-selections > "$BACKUP_DIR/dpkg-selections.txt" 2>/dev/null
     apt-mark showmanual > "$BACKUP_DIR/apt-manual.txt" 2>/dev/null
 
-    # Sources list
-    cp -a /etc/apt/sources.list "$BACKUP_DIR/" 2>/dev/null
+    # Sources list / sources files
+    cp -a /etc/apt/sources.list "$BACKUP_DIR/" 2>/dev/null || true
     [[ -d /etc/apt/sources.list.d ]] && cp -a /etc/apt/sources.list.d "$BACKUP_DIR/"
 
     log_info "Backup created at: ${BOLD}$BACKUP_DIR${NC}"
@@ -234,9 +255,15 @@ create_backup() {
 phase_01_scan() {
     log_phase "Phase 1: Scanning PPAs and external repositories"
 
-    # External repo files (fresh 22.04 has empty sources.list.d/)
+    # External repo files
     if [[ -d /etc/apt/sources.list.d ]]; then
         while IFS= read -r -d '' file; do
+            local basename
+            basename=$(basename "$file")
+            # On 24.04, ubuntu.sources is the default system repo — not external
+            if [[ "$UBUNTU_VERSION" == "24.04" && "$basename" == "ubuntu.sources" ]]; then
+                continue
+            fi
             ADDED_REPOS+=("$file")
         done < <(find /etc/apt/sources.list.d/ -type f \( -name '*.list' -o -name '*.sources' \) -print0 2>/dev/null)
     fi
@@ -285,21 +312,42 @@ phase_01_clean() {
         log_action "Removed key: $key"
     done
 
-    # Restore default sources.list for jammy
-    cat > /etc/apt/sources.list <<'SOURCES'
-# Ubuntu 22.04 LTS (Jammy Jellyfish) - default repositories
-deb http://archive.ubuntu.com/ubuntu/ jammy main restricted
-deb http://archive.ubuntu.com/ubuntu/ jammy-updates main restricted
-deb http://archive.ubuntu.com/ubuntu/ jammy universe
-deb http://archive.ubuntu.com/ubuntu/ jammy-updates universe
-deb http://archive.ubuntu.com/ubuntu/ jammy multiverse
-deb http://archive.ubuntu.com/ubuntu/ jammy-updates multiverse
-deb http://archive.ubuntu.com/ubuntu/ jammy-backports main restricted universe multiverse
-deb http://security.ubuntu.com/ubuntu/ jammy-security main restricted
-deb http://security.ubuntu.com/ubuntu/ jammy-security universe
-deb http://security.ubuntu.com/ubuntu/ jammy-security multiverse
+    # Restore default sources — format depends on Ubuntu version
+    if [[ "$UBUNTU_VERSION" == "24.04" ]]; then
+        # 24.04 uses deb822 .sources format
+        cat > /etc/apt/sources.list.d/ubuntu.sources <<SOURCES
+Types: deb
+URIs: http://archive.ubuntu.com/ubuntu/
+Suites: ${UBUNTU_CODENAME} ${UBUNTU_CODENAME}-updates ${UBUNTU_CODENAME}-backports
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+Types: deb
+URIs: http://security.ubuntu.com/ubuntu/
+Suites: ${UBUNTU_CODENAME}-security
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 SOURCES
-    log_action "Restored default sources.list"
+        # Remove legacy sources.list if present (24.04 doesn't use it)
+        rm -f /etc/apt/sources.list 2>/dev/null || true
+        log_action "Restored default ubuntu.sources (deb822 format)"
+    else
+        # 22.04 uses traditional sources.list format
+        cat > /etc/apt/sources.list <<SOURCES
+# Ubuntu ${UBUNTU_VERSION} LTS (${UBUNTU_CODENAME^}) - default repositories
+deb http://archive.ubuntu.com/ubuntu/ ${UBUNTU_CODENAME} main restricted
+deb http://archive.ubuntu.com/ubuntu/ ${UBUNTU_CODENAME}-updates main restricted
+deb http://archive.ubuntu.com/ubuntu/ ${UBUNTU_CODENAME} universe
+deb http://archive.ubuntu.com/ubuntu/ ${UBUNTU_CODENAME}-updates universe
+deb http://archive.ubuntu.com/ubuntu/ ${UBUNTU_CODENAME} multiverse
+deb http://archive.ubuntu.com/ubuntu/ ${UBUNTU_CODENAME}-updates multiverse
+deb http://archive.ubuntu.com/ubuntu/ ${UBUNTU_CODENAME}-backports main restricted universe multiverse
+deb http://security.ubuntu.com/ubuntu/ ${UBUNTU_CODENAME}-security main restricted
+deb http://security.ubuntu.com/ubuntu/ ${UBUNTU_CODENAME}-security universe
+deb http://security.ubuntu.com/ubuntu/ ${UBUNTU_CODENAME}-security multiverse
+SOURCES
+        log_action "Restored default sources.list"
+    fi
 
     apt-get update -qq 2>&1 | tee -a "$LOG_FILE"
     log_action "apt-get update completed"
@@ -1003,7 +1051,7 @@ phase_12_scan() {
         grep -v "$current_kernel" | \
         grep -v 'generic$' | \
         grep -v 'lowlatency$' | \
-        grep -v 'lowlatency-hwe-22.04$' | \
+        grep -v "lowlatency-hwe-${UBUNTU_VERSION}\$" | \
         sort || true)
 
     report_section "Current kernel" "$current_kernel"
@@ -1114,8 +1162,8 @@ main() {
 
     echo -e "${BOLD}${CYAN}"
     echo "  ┌─────────────────────────────────────────────┐"
-    echo "  │         clean-ubuntu.sh v1.0                 │"
-    echo "  │  Reset Ubuntu 22.04 to bare-install state   │"
+    echo "  │         clean-ubuntu.sh v1.1                 │"
+    echo "  │  Reset Ubuntu $UBUNTU_VERSION to bare-install state   │"
     echo "  │                                              │"
     echo "  │  Preserves: users, sudoers, SSH              │"
     echo "  │  Removes:   everything else                  │"

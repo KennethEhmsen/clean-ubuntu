@@ -1,10 +1,10 @@
 # clean-ubuntu
 
-Reset Ubuntu Server 22.04 LTS to bare-installation state. Removes everything installed or configured after the initial OS install while preserving users, sudoers, and SSH.
+Reset Ubuntu Server 22.04/24.04 LTS to bare-installation state. Removes everything installed or configured after the initial OS install while preserving users, sudoers, and SSH.
 
 ## What it does
 
-The script compares your current system against the base Ubuntu Server 22.04 package manifest and removes everything that was added. It runs in **12 phases**:
+The script auto-detects your Ubuntu version (22.04 or 24.04), compares your current system against the matching base package manifest, and removes everything that was added. It runs in **12 phases**:
 
 | Phase | Target |
 |-------|--------|
@@ -74,7 +74,7 @@ sudo ./clean-ubuntu.sh --execute --yes
 
 ## Requirements
 
-- Ubuntu Server **22.04 LTS** (Jammy Jellyfish)
+- Ubuntu Server **22.04 LTS** (Jammy Jellyfish) or **24.04 LTS** (Noble Numbat)
 - Root privileges (`sudo`)
 - The script will refuse to run on any other Ubuntu version
 
@@ -83,7 +83,7 @@ sudo ./clean-ubuntu.sh --execute --yes
 The script identifies base packages using one of two methods:
 
 1. **`/var/log/installer/initial-status.gz`** — the package snapshot created by the Ubuntu installer at install time (preferred, most accurate)
-2. **`defaults/base-packages.txt`** — a fallback manifest derived from the `ubuntu-server`, `ubuntu-minimal`, and `ubuntu-standard` meta-package dependency trees (used when the installer snapshot is missing)
+2. **`defaults/base-packages-{version}.txt`** — a version-specific fallback manifest derived from the official server ISO package manifest (used when the installer snapshot is missing). Separate manifests are maintained for 22.04 and 24.04.
 
 Packages are compared using `apt-mark showmanual` against the base manifest. Only manually-installed non-base packages are targeted for removal. An `apt-get remove --dry-run` simulation is run before any actual removal to catch dependency conflicts.
 
@@ -100,7 +100,7 @@ The backup at `/root/clean-ubuntu-backup-<timestamp>/` contains:
 - User/group/shadow files
 - Sudoers configuration
 - Package state snapshot (`dpkg-selections.txt`, `apt-manual.txt`)
-- Original `sources.list` and `sources.list.d/`
+- Original `sources.list` / `sources.list.d/` (including deb822 `.sources` files on 24.04)
 
 ## License
 

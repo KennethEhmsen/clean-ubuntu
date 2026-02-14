@@ -2,12 +2,24 @@
 
 ## Project overview
 
-Single bash script (`clean-ubuntu.sh`) that resets Ubuntu Server 22.04 LTS to bare-installation state. Removes all packages, services, data, and configs added after initial install while preserving users, sudoers, and SSH.
+Single bash script (`clean-ubuntu.sh`) that resets Ubuntu Server 22.04 or 24.04 LTS to bare-installation state. Removes all packages, services, data, and configs added after initial install while preserving users, sudoers, and SSH.
 
 ## Architecture
 
-- **`clean-ubuntu.sh`** — monolithic script, all logic in one file. 12 scan/clean phase pairs, argument parser, report generator, backup system.
-- **`defaults/base-packages.txt`** — fallback package manifest (609 packages). Used when `/var/log/installer/initial-status.gz` is missing. Derived from `apt-cache depends --recurse ubuntu-server ubuntu-minimal ubuntu-standard` plus essential packages confirmed on a real system.
+- **`clean-ubuntu.sh`** — monolithic script, all logic in one file. 12 scan/clean phase pairs, argument parser, report generator, backup system. Auto-detects Ubuntu version and adapts behavior accordingly.
+- **`defaults/base-packages-22.04.txt`** — fallback package manifest for Ubuntu 22.04 (609 packages). Derived from `apt-cache depends --recurse ubuntu-server ubuntu-minimal ubuntu-standard` plus essential packages confirmed on a real system.
+- **`defaults/base-packages-24.04.txt`** — fallback package manifest for Ubuntu 24.04 (670 packages). Derived from the official `ubuntu-24.04.4-live-server-amd64.manifest` with installer-only and version-specific kernel packages removed.
+
+## Multi-version support
+
+The script detects `VERSION_ID` from `/etc/os-release` and sets `UBUNTU_VERSION` and `UBUNTU_CODENAME` globals. Version-dependent behavior:
+
+| Feature | 22.04 (Jammy) | 24.04 (Noble) |
+|---------|---------------|---------------|
+| APT sources format | Traditional `sources.list` | deb822 `ubuntu.sources` |
+| Default snaps | bare core20 core22 lxd snapd | bare core22 core24 lxd snapd |
+| Base manifest | `base-packages-22.04.txt` | `base-packages-24.04.txt` |
+| Python version | 3.10 | 3.12 |
 
 ## Key design decisions
 
@@ -27,12 +39,13 @@ Single bash script (`clean-ubuntu.sh`) that resets Ubuntu Server 22.04 LTS to ba
 ## Testing
 
 - Always test with `--dry-run` first (the default).
-- Target system: Ubuntu Server 22.04 LTS only. The script gates on `VERSION_ID=22.04` and refuses to run on anything else.
+- Target systems: Ubuntu Server 22.04 LTS and 24.04 LTS. The script gates on `VERSION_ID` and refuses to run on anything else.
 - Deploy to server: `scp clean-ubuntu.sh defaults/ user@host:/tmp/`
 - Run: `ssh user@host "sudo /tmp/clean-ubuntu.sh"`
 
 ## Common tasks
 
-- **Adding packages to base manifest**: Add to `defaults/base-packages.txt` in sorted order. These are packages that should NOT be removed on a bare system.
+- **Adding packages to base manifest**: Add to `defaults/base-packages-{VERSION}.txt` in sorted order. These are packages that should NOT be removed on a bare system.
 - **Adding a new cleanup phase**: Create `phase_NN_scan()` and `phase_NN_clean()` functions. Add scan call to the scan block and clean call to the execute block in `main()`. Add to the `SKIP_PHASES` help text.
 - **Changing batch size**: Edit `batch_size=20` in `phase_02_clean()`.
+- **Adding a new Ubuntu version**: Create `defaults/base-packages-{VERSION}.txt`, add the version to the `case` in `check_prerequisites()`, and handle any version-specific behavior (sources format, default snaps, etc.).
