@@ -63,6 +63,7 @@ printf "  ${C}${BOLD}│${NC}  ${W}${BOLD}%-50s${NC}  ${C}${BOLD}│${NC}\n" "$H
 echo -e "  ${C}${BOLD}├──────────────────────────────────────────────────────┤${NC}"
 printf "  ${C}${BOLD}│${NC}  ${D}%-50s${NC}  ${C}${BOLD}│${NC}\n" "$OS"
 printf "  ${C}${BOLD}│${NC}  ${D}Kernel: %-42s${NC}  ${C}${BOLD}│${NC}\n" "$KERNEL"
+printf "  ${C}${BOLD}│${NC}  ${D}%-50s${NC}  ${C}${BOLD}│${NC}\n" "clean-ubuntu v1.5"
 echo -e "  ${C}${BOLD}└──────────────────────────────────────────────────────┘${NC}"
 echo ""
 echo -e "  ${W}${BOLD}System${NC}"
