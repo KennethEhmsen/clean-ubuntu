@@ -38,10 +38,19 @@ The script detects `VERSION_ID` from `/etc/os-release` and sets `UBUNTU_VERSION`
 - Report data accumulates in `REPORT_LINES` array during scan phases, rendered by `generate_report()`.
 - Global arrays (e.g., `SAFE_TO_REMOVE`, `ADDED_REPOS`, `DOCKER_CONTAINERS`) are populated during scan and consumed during clean.
 
+## Custom MOTD
+
+- `defaults/00-custom-motd` — standalone bash script installed to `/etc/update-motd.d/00-custom`
+- `install_custom_motd()` runs as the last step in execute mode
+- Disables all default Ubuntu MOTD scripts (ads, ESM nags, help text, update/reboot notices) via `chmod -x`
+- Header box shows: hostname, OS, kernel, clean-ubuntu version
+- Body shows: uptime, load, users, pending updates, color-coded memory/disk usage bars, IP addresses
+- **Version must be updated in two places**: `clean-ubuntu.sh` banner (~line 1204) and `defaults/00-custom-motd` header box
+
 ## Testing
 
 - Always test with `--dry-run` first (the default).
-- Target systems: Ubuntu Server 22.04 LTS and 24.04 LTS. The script gates on `VERSION_ID` and refuses to run on anything else.
+- Target systems: Ubuntu Server 20.04, 22.04, 24.04, and 26.04 LTS. The script gates on `VERSION_ID` and refuses to run on anything else.
 - Deploy to server: `scp clean-ubuntu.sh defaults/ user@host:/tmp/`
 - Run: `ssh user@host "sudo /tmp/clean-ubuntu.sh"`
 
@@ -51,3 +60,5 @@ The script detects `VERSION_ID` from `/etc/os-release` and sets `UBUNTU_VERSION`
 - **Adding a new cleanup phase**: Create `phase_NN_scan()` and `phase_NN_clean()` functions. Add scan call to the scan block and clean call to the execute block in `main()`. Add to the `SKIP_PHASES` help text.
 - **Changing batch size**: Edit `batch_size=20` in `phase_02_clean()`.
 - **Adding a new Ubuntu version**: Create `defaults/base-packages-{VERSION}.txt`, add the version to the `case` in `check_prerequisites()`, and handle any version-specific behavior (sources format, default snaps, etc.).
+- **Bumping version**: Update the version string in both `clean-ubuntu.sh` banner (~line 1204) and `defaults/00-custom-motd` header box.
+- **Deploying to server**: `scp clean-ubuntu.sh defaults/* ehm_admin@192.168.1.15:/tmp/clean-ubuntu/` then `sudo cp` to `/opt/clean-ubuntu/`. To update the live MOTD: `sudo cp /opt/clean-ubuntu/defaults/00-custom-motd /etc/update-motd.d/00-custom && sudo chmod +x /etc/update-motd.d/00-custom`.
