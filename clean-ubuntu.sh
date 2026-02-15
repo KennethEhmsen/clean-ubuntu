@@ -1201,7 +1201,7 @@ main() {
 
     echo -e "${BOLD}${CYAN}"
     echo "  ┌─────────────────────────────────────────────┐"
-    echo "  │         clean-ubuntu.sh v1.4                 │"
+    echo "  │         clean-ubuntu.sh v1.5                 │"
     echo "  │  Reset Ubuntu $UBUNTU_VERSION to bare-install state   │"
     echo "  │                                              │"
     echo "  │  Preserves: users, sudoers, SSH              │"
